@@ -34,7 +34,6 @@ bool Lyligo_4_7_e_paper_TimeProvider::begin() {
 // ─── ITimeProvider ───────────────────────────────────────────────────────────
 
 bool Lyligo_4_7_e_paper_TimeProvider::sync() {
-    LOG("[INFO] Syncing time from RTC...");
     RTC_Date d = _rtc.getDateTime();
 
     // Basic sanity check — PCF8563 rolls over at year 99; we expect ≥2020.

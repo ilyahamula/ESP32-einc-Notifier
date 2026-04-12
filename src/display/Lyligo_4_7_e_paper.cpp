@@ -226,8 +226,15 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
         return k[m];
     };
 
+    // Column width sized to the widest day label content ("Wed", "30") + margins.
+    const int32_t dayLabelW = std::max(textWidth((GFXfont*)&FontSmall, "Wed"),
+                                       textWidth((GFXfont*)&FontSmall, "30"));
+    const int32_t daySepX  = WEEK_X + 4 + dayLabelW + 4;
+    const int32_t weekEvX  = daySepX + 4;
+    const int32_t weekEvW  = WEEK_X + WEEK_W - weekEvX - 4;
+
     for (int32_t y = WEEK_Y; y < WEEK_Y + WEEK_H; ++y)
-        epd_draw_pixel(DAY_SEP_X, y, 0x00, _fb);
+        epd_draw_pixel(daySepX, y, 0x00, _fb);
 
     for (int32_t d = 0; d < WEEK_DAYS; ++d) {
         int rowYear  = _currentTime.year;
@@ -275,12 +282,12 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
             });
 
         const int32_t n     = static_cast<int32_t>(dayEvents.size());
-        const int32_t slotW = WEEK_EV_W / n;
+        const int32_t slotW = weekEvW / n;
         const int32_t boxH  = DAY_ROW_H - 2;  // 55px
 
         for (int32_t i = 0; i < n; ++i) {
             const EventData* ev = dayEvents[i];
-            const int32_t boxX = WEEK_EV_X + i * slotW;
+            const int32_t boxX = weekEvX + i * slotW;
             const int32_t boxY = rowY + 1;
             const int32_t boxW = (i == n - 1)
                                  ? (WEEK_X + WEEK_W - 4 - boxX)
@@ -295,6 +302,17 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
                 int32_t tcx = boxX + kPad + 1;
                 int32_t tcy = boxY + kSmAsc + kPad;
                 writeln((GFXfont*)&FontSmall, label.c_str(), &tcx, &tcy, _fb);
+
+                // Start time below title — fits when line 2 bottom (kPad+kSmAsc+kSmAdv+kSmDesc=54) < boxH.
+                const int32_t timeCy = tcy + kSmAdv;
+                if (kPad + kSmAsc + kSmAdv + kSmDesc < boxH) {
+                    char timeBuf[6];
+                    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d",
+                             ev->dateTime.hour, ev->dateTime.minute);
+                    int32_t ttcx = boxX + kPad + 1;
+                    int32_t ttcy = timeCy;
+                    writeln((GFXfont*)&FontSmall, timeBuf, &ttcx, &ttcy, _fb);
+                }
             }
         }
     }
@@ -324,8 +342,13 @@ void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events
     const float startTime = _currentTime.hour + _currentTime.minute / 60.0f;
     const float endTime   = startTime + kViewHours;
 
+    // Column width sized to the widest hour label ("23:00") + margins.
+    const int32_t hourSepX  = UPCOMING_X + 4 + textWidth((GFXfont*)&FontSmall, "23:00") + 4;
+    const int32_t eventColX = hourSepX + 4;
+    const int32_t eventColW = UPCOMING_W - eventColX - 4;
+
     for (int32_t y = UPCOMING_Y; y < UPCOMING_Y + UPCOMING_H; ++y)
-        epd_draw_pixel(HOUR_SEP_X, y, 0x00, _fb);
+        epd_draw_pixel(hourSepX, y, 0x00, _fb);
 
     // Tick + label for every whole hour within the view.
     const int32_t firstHour = static_cast<int32_t>(startTime) +
@@ -333,7 +356,7 @@ void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events
     for (int32_t h = firstHour; static_cast<float>(h) <= endTime; ++h) {
         const int32_t ty = UPCOMING_Y + static_cast<int32_t>((h - startTime) * pph);
 
-        for (int32_t tx = HOUR_SEP_X; tx <= HOUR_SEP_X + 5; ++tx)
+        for (int32_t tx = hourSepX; tx <= hourSepX + 5; ++tx)
             epd_draw_pixel(tx, ty, 0x00, _fb);
 
         // Vertically centre FontSmall label on tick.
@@ -349,22 +372,31 @@ void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events
         writeln((GFXfont*)&FontSmall, label, &cx, &cy, _fb);
     }
 
-    // Event text thresholds (derived from font metrics above):
-    // kMinTitle = kMdH + 2*kPad = 36+6 = 42px  (title line fits)
-    // titleBottom offset from boxY = kPad + kMdAsc + kMdDesc = 3+28+8 = 39px
-    // cy2 offset from boxY         = 39 + kPad + kSmAsc     = 39+3+20 = 62px
-    // time bottom offset           = 62 + kSmDesc            = 68px  → need boxH ≥ 68+kPad = 71
-    // cy3 offset from boxY         = 62 + kSmAdv             = 87px
-    // desc bottom offset           = 87 + kSmDesc            = 93px  → need boxH ≥ 93+kPad = 96
-    static constexpr int32_t kMinTitle = kMdH + 2 * kPad;  // 42
-
     for (const auto& ev : events) {
-        if (ev.dateTime.year  != _currentTime.year  ||
-            ev.dateTime.month != _currentTime.month ||
-            ev.dateTime.day   != _currentTime.day) continue;
+        // Accept events from the current day OR the next day (for windows crossing midnight).
+        bool isCurrentDay = (ev.dateTime.year  == _currentTime.year  &&
+                             ev.dateTime.month == _currentTime.month &&
+                             ev.dateTime.day   == _currentTime.day);
+        bool isNextDay    = false;
+        if (!isCurrentDay) {
+            // Build a simple day index to check adjacency (handles month/year wrap via carry).
+            // We only need to know if ev is exactly one calendar day after _currentTime.
+            // Compute day-of-year offset isn't necessary — just check by incrementing.
+            int ey = _currentTime.year, em = _currentTime.month, ed = _currentTime.day + 1;
+            static const int dpm[] = {0,31,28,31,30,31,30,31,31,30,31,30,31};
+            int maxDay = dpm[em];
+            if (em == 2 && ((ey % 4 == 0 && ey % 100 != 0) || ey % 400 == 0)) maxDay = 29;
+            if (ed > maxDay) { ed = 1; em++; }
+            if (em > 12)     { em = 1; ey++; }
+            isNextDay = (ev.dateTime.year  == ey &&
+                         ev.dateTime.month == em &&
+                         ev.dateTime.day   == ed);
+        }
+        if (!isCurrentDay && !isNextDay) continue;
 
-        const float evStartH = ev.dateTime.hour + ev.dateTime.minute / 60.0f;
-        const float evEndH   = evStartH + ev.durationSeconds / 3600.0f;
+        float evStartH = ev.dateTime.hour + ev.dateTime.minute / 60.0f;
+        if (isNextDay) evStartH += 24.0f;  // shift next-day events into the same timeline
+        const float evEndH = evStartH + ev.durationSeconds / 3600.0f;
         if (evEndH  < startTime) continue;
         if (evStartH > endTime)  continue;
 
@@ -378,52 +410,66 @@ void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events
         if (boxY + boxH > areaBottom) boxH = areaBottom - boxY;
         if (boxH <= 0) continue;
 
-        const int32_t boxW     = EVENT_COL_W;
+        const int32_t boxW     = eventColW;
+        const int32_t textX    = eventColX + kPad + 1;
         const int32_t textMaxW = boxW - 2 * kPad - 2;
-        epd_draw_rect(EVENT_COL_X, boxY, boxW, boxH, 0x00, _fb);
+        if (textMaxW <= 0) continue;
 
-        // Line 1: title (FontMedium) — needs boxH ≥ 42px.
-        if (boxH < kMinTitle || textMaxW <= 0) continue;
-        int32_t cy1 = boxY + kMdAsc + kPad;
-        int32_t cx1 = EVENT_COL_X + kPad + 1;
-        writeln((GFXfont*)&FontMedium,
-                fitText(&FontMedium, ev.title, textMaxW).c_str(),
-                &cx1, &cy1, _fb);
+        // Build time string "HH:MM-HH:MM" — always shown right-aligned.
+        const uint32_t endTotalMin = ev.dateTime.hour * 60 + ev.dateTime.minute
+                                     + ev.durationSeconds / 60;
+        const int32_t endH = static_cast<int32_t>(endTotalMin / 60) % 24;
+        const int32_t endM = static_cast<int32_t>(endTotalMin % 60);
+        char timeStr[12];
+        snprintf(timeStr, sizeof(timeStr), "%02d:%02d-%02d:%02d",
+                 ev.dateTime.hour, ev.dateTime.minute, endH, endM);
+        const int32_t timeW = textWidth((GFXfont*)&FontSmall, timeStr);
 
-        // Line 2: start time + duration (FontSmall) — needs boxH ≥ 71px.
-        const int32_t titleBottom = boxY + kPad + kMdAsc + kMdDesc;  // boxY+39
-        const int32_t cy2 = titleBottom + kPad + kSmAsc;              // boxY+62
-        if (boxH < cy2 - boxY + kSmDesc + kPad) continue;
+        // Minimum gap between title and time (~3 spaces).
+        static constexpr int32_t kTimeGap = 8;
+        const int32_t titleMaxW = textMaxW - timeW - kTimeGap;
+        const String fittedTitle = (titleMaxW > 0)
+            ? fitText((GFXfont*)&FontSmall, ev.title, titleMaxW)
+            : String();
 
-        const uint32_t totalMin = ev.durationSeconds / 60;
-        char timeLine[32];
-        if (totalMin < 60)
-            snprintf(timeLine, sizeof(timeLine), "%02d:%02d  %u min",
-                     ev.dateTime.hour, ev.dateTime.minute, totalMin);
-        else {
-            const uint32_t h = totalMin / 60, m = totalMin % 60;
-            if (m == 0)
-                snprintf(timeLine, sizeof(timeLine), "%02d:%02d  %uh",
-                         ev.dateTime.hour, ev.dateTime.minute, h);
-            else
-                snprintf(timeLine, sizeof(timeLine), "%02d:%02d  %uh %um",
-                         ev.dateTime.hour, ev.dateTime.minute, h, m);
+        // Text baseline top-aligned inside box.
+        const int32_t textCy   = boxY + kPad + kSmAsc;
+        const bool    overflows = (textCy + kSmDesc > boxY + boxH);
+
+        // X position of time label (right-aligned inside box).
+        const int32_t timeX = eventColX + boxW - 1 - kPad - timeW;
+
+        // Draw rect border.  When text overflows the box, leave a gap on the
+        // bottom edge covering the full text area so glyphs are unobstructed.
+        if (!overflows) {
+            epd_draw_rect(eventColX, boxY, boxW, boxH, 0x00, _fb);
+        } else {
+            const int32_t bx1 = eventColX;
+            const int32_t bx2 = eventColX + boxW - 1;
+            const int32_t by1 = boxY;
+            const int32_t by2 = boxY + boxH - 1;
+            // top edge
+            for (int32_t px = bx1; px <= bx2; ++px)
+                epd_draw_pixel(px, by1, 0x00, _fb);
+            // bottom edge — skip the interior where text sits
+            for (int32_t px = bx1; px <= bx2; ++px)
+                if (px <= bx1 || px >= bx2)  // keep only corners
+                    epd_draw_pixel(px, by2, 0x00, _fb);
+            // left edge
+            for (int32_t py = by1 + 1; py < by2; ++py)
+                epd_draw_pixel(bx1, py, 0x00, _fb);
+            // right edge
+            for (int32_t py = by1 + 1; py < by2; ++py)
+                epd_draw_pixel(bx2, py, 0x00, _fb);
         }
-        int32_t cx2 = EVENT_COL_X + kPad + 1;
-        int32_t mcy2 = cy2;
-        writeln((GFXfont*)&FontSmall,
-                fitText(&FontSmall, String(timeLine), textMaxW).c_str(),
-                &cx2, &mcy2, _fb);
 
-        // Line 3: description (FontSmall) — needs boxH ≥ 96px AND ≥2 words.
-        const int32_t cy3 = cy2 + kSmAdv;
-        if (boxH < cy3 - boxY + kSmDesc + kPad) continue;
-        if (wordCount(ev.description) < 2) continue;
-        int32_t cx3 = EVENT_COL_X + kPad + 1;
-        int32_t mcy3 = cy3;
-        writeln((GFXfont*)&FontSmall,
-                fitText(&FontSmall, ev.description, textMaxW).c_str(),
-                &cx3, &mcy3, _fb);
+        // Render title (left) and time range (right).
+        if (!fittedTitle.isEmpty()) {
+            int32_t cx = textX, cy = textCy;
+            writeln((GFXfont*)&FontSmall, fittedTitle.c_str(), &cx, &cy, _fb);
+        }
+        int32_t tcx = timeX, tcy = textCy;
+        writeln((GFXfont*)&FontSmall, timeStr, &tcx, &tcy, _fb);
     }
 }
 
