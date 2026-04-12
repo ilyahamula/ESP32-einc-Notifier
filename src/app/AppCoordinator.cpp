@@ -4,13 +4,11 @@
 
 AppCoordinator::AppCoordinator(DisplayManager*      display,
                                 WeatherManager*      weather,
-                                TimeManager*         time,
                                 EventManager*        events,
                                 ConnectivityManager* connectivity,
                                 ISyncService*        sync)
     : _display(display),
       _weather(weather),
-      _time(time),
       _events(events),
       _connectivity(connectivity),
       _sync(sync) {}
@@ -36,7 +34,7 @@ void AppCoordinator::setup() {
         _registerSyncCallbacks();
     }
 
-    if (_time)    _time->init();
+    TimeManager::instance().init();
     if (_weather) _weather->init();
     if (_events)  _events->init();
 
@@ -50,19 +48,17 @@ void AppCoordinator::loop() {
         _state.connectivityStatus = _connectivity->getStatus();
     }
 
-    // 2. Process incoming push messages (BLE/WiFi/Bluetooth packets)
+    // 2. Process incoming push messages
     if (_sync) _sync->tick();
 
-    // 3. Poll data sources on their own schedules
-    if (_time)    _time->tick();
+    // 3. Poll data sources
+    TimeManager::instance().tick();
     if (_weather) _weather->tick();
     if (_events)  _events->tick();
 
-    // 4. Refresh the display on its own schedule
-    unsigned long now = millis();
-    if (now - _lastDisplayRefreshMs >= DISPLAY_REFRESH_INTERVAL_MS) {
+    // 4. Refresh display on each new minute (aligned to the wall clock).
+    if (TimeManager::instance().minuteChanged()) {
         _updateDisplay();
-        _lastDisplayRefreshMs = now;
     }
 }
 
@@ -71,7 +67,7 @@ void AppCoordinator::_updateDisplay() {
 
     static const std::vector<EventData> emptyEvents;
 
-    const TimeData&               time    = _time    ? _time->getCurrentTime()       : TimeData{};
+    const TimeData&               time    = TimeManager::instance().getCurrentTime();
     const WeatherData&            weather = _weather ? _weather->getCurrentWeather() : WeatherData{};
     const std::vector<EventData>& events  = _events  ? _events->getUpcomingEvents()  : emptyEvents;
 
@@ -88,8 +84,6 @@ void AppCoordinator::_registerSyncCallbacks() {
     });
 
     _sync->onWeatherReceived([this](const WeatherData& weather) {
-        // A real impl would forward this to WeatherManager's cache.
-        // Requires a push-capable WeatherManager extension.
         (void)weather;
         LOG("[App] Weather update received via sync");
     });

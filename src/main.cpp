@@ -22,18 +22,17 @@
 #include "stubs/NullSyncService.h"
 
 // ─── Infrastructure Instances ─────────────────────────────────────────────────
-static Lyligo_4_7_e_paper   display;
+static Lyligo_4_7_e_paper              display;
 static Lyligo_4_7_e_paper_TimeProvider timeProvider;
-static FakeWeatherProvider  weatherProvider;
-static FakeEventProvider    eventProvider;
-static FakeConnectivity     connectivity;
-static NullSyncService      syncService;
+static FakeWeatherProvider             weatherProvider;
+static FakeEventProvider               eventProvider;
+static FakeConnectivity                connectivity;
+static NullSyncService                 syncService;
 
 // ─── Manager Instances ────────────────────────────────────────────────────────
-static DisplayManager     displayManager(&display);
-static WeatherManager     weatherManager(&weatherProvider, WEATHER_UPDATE_INTERVAL_MS);
-static TimeManager        timeManager(&timeProvider, TIME_SYNC_INTERVAL_MS);
-static EventManager       eventManager(&eventProvider, EVENT_SYNC_INTERVAL_MS);
+static DisplayManager      displayManager(&display);
+static WeatherManager      weatherManager(&weatherProvider, WEATHER_UPDATE_INTERVAL_MS);
+static EventManager        eventManager(&eventProvider, EVENT_SYNC_INTERVAL_MS);
 static ConnectivityManager connectivityManager(&connectivity,
                                                CONNECTIVITY_RETRY_DELAY_MS,
                                                CONNECTIVITY_MAX_RETRIES);
@@ -42,7 +41,6 @@ static ConnectivityManager connectivityManager(&connectivity,
 static AppCoordinator app(
     &displayManager,
     &weatherManager,
-    &timeManager,
     &eventManager,
     &connectivityManager,
     &syncService
@@ -52,11 +50,14 @@ static AppCoordinator app(
 void setup() {
 #ifdef DEBUG_SERIAL
     Serial.begin(SERIAL_BAUD_RATE);
-    delay(1000); // Allow time for serial monitor to connect
+    delay(1000);
 #endif
+
     if (!timeProvider.begin()) {
         LOG("[WARN] RTC chip not found — time unavailable");
     }
+
+    TimeManager::instance().setProvider(&timeProvider);
 
     app.setup();
 }

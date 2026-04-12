@@ -11,7 +11,6 @@ class AppCoordinator {
 public:
     AppCoordinator(DisplayManager*      display,
                    WeatherManager*      weather,
-                   TimeManager*         time,
                    EventManager*        events,
                    ConnectivityManager* connectivity,
                    ISyncService*        sync);
@@ -27,11 +26,9 @@ private:
 
     DisplayManager*      _display;
     WeatherManager*      _weather;
-    TimeManager*         _time;
     EventManager*        _events;
     ConnectivityManager* _connectivity;
     ISyncService*        _sync;
 
-    DeviceState   _state;
-    unsigned long _lastDisplayRefreshMs = 0;
+    DeviceState _state;
 };

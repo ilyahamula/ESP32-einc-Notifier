@@ -16,9 +16,9 @@
 
 // ─── Update Intervals (milliseconds) ─────────────────────────────────────────
 #define WEATHER_UPDATE_INTERVAL_MS   (10UL * 60UL * 1000UL)  // 10 min
-#define TIME_SYNC_INTERVAL_MS        (       60UL * 1000UL)  // 1 min
 #define EVENT_SYNC_INTERVAL_MS       (       60UL * 1000UL)  // 1 min
-#define DISPLAY_REFRESH_INTERVAL_MS  (       60UL * 1000UL)  // 1 min
+// Display is refreshed on each wall-clock minute change (see TimeManager).
+// RTC hardware re-read interval is defined in TimeManager::kHardwareSyncMs.
 
 // ─── Connectivity ─────────────────────────────────────────────────────────────
 #define CONNECTIVITY_RETRY_DELAY_MS  5000
