@@ -60,7 +60,7 @@ private:
     // ── Hours timeline ───────────────────────────────────────────────────
     // 12 slots total (current−6 … current+6), ~33.75 px/slot
     static constexpr int32_t HOURS_RANGE  = 12;
-    static constexpr int32_t HOUR_COL_W  = 120;  // room for "23:00" in FiraSans
+    static constexpr int32_t HOUR_COL_W  = 80;   // room for "23:00" in FontSmall (10pt)
     static constexpr int32_t HOUR_SEP_X  = UPCOMING_X + HOUR_COL_W + 2;
     static constexpr int32_t EVENT_COL_X = HOUR_SEP_X + 4;
     static constexpr int32_t EVENT_COL_W = UPCOMING_W - EVENT_COL_X - 4;
@@ -72,7 +72,7 @@ private:
     static constexpr int32_t WEEK_W      = SCREEN_W / 2;  // 480
     static constexpr int32_t WEEK_H      = EVENTS_H;      // 405
     static constexpr int32_t WEEK_DAYS   = 7;
-    static constexpr int32_t DAY_COL_W   = 56;            // enough for "Wed"
+    static constexpr int32_t DAY_COL_W   = 100;           // enough for "Mon", "Thu", etc.
     static constexpr int32_t DAY_SEP_X   = WEEK_X + DAY_COL_W + 2;
     static constexpr int32_t DAY_ROW_H   = WEEK_H / WEEK_DAYS; // 57 px per day row
     static constexpr int32_t WEEK_EV_X   = DAY_SEP_X + 4;
