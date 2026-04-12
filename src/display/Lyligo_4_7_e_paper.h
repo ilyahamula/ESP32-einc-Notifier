@@ -26,7 +26,8 @@ private:
     TimeData _currentTime;
 
     void ensurePowerOn();
-    void clearFbRegion(int32_t x, int32_t y, int32_t w, int32_t h); 
+    void clearFbRegion(int32_t x, int32_t y, int32_t w, int32_t h);
+    void drawBorder(int32_t x, int32_t y, int32_t w, int32_t h);
     void showUpcomingEvents(const std::vector<EventData>& events);
     void showWeekEvents(const std::vector<EventData>& events);
 

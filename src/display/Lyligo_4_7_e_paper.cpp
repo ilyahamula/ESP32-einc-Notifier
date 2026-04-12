@@ -132,6 +132,7 @@ void Lyligo_4_7_e_paper::showTime(const TimeData& time) {
     _currentTime = time;
 
     clearFbRegion(TIME_X, TIME_Y, TIME_W, TIME_H);
+    drawBorder(TIME_X, TIME_Y, TIME_W, TIME_H);
 
     char timeBuf[8];
     snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", time.hour, time.minute);
@@ -167,6 +168,7 @@ void Lyligo_4_7_e_paper::showTime(const TimeData& time) {
 void Lyligo_4_7_e_paper::showWeather(const WeatherData& weather) {
     if (!_ready || !_fb) return;
     clearFbRegion(WEATHER_X, WEATHER_Y, WEATHER_W, WEATHER_H);
+    drawBorder(WEATHER_X, WEATHER_Y, WEATHER_W, WEATHER_H);
 
     const int32_t usableW = WEATHER_W - 24;
 
@@ -216,6 +218,7 @@ void Lyligo_4_7_e_paper::showEvents(const std::vector<EventData>& events) {
 //
 void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
     clearFbRegion(WEEK_X, WEEK_Y, WEEK_W, WEEK_H);
+    drawBorder(WEEK_X, WEEK_Y, WEEK_W, WEEK_H);
 
     auto daysInMonth = [](int y, int m) -> int {
         if (m == 2 && (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0))) return 29;
@@ -299,43 +302,47 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
 
 // ─── showUpcomingEvents ───────────────────────────────────────────────────────
 //
-//  Area: x=0, y=135, w=480, h=405   pph ≈ 33.75px/hour.
+//  Area: x=0, y=135, w=480, h=405   pph ≈ 67.5px/hour (6-hour window).
+//
+//  View: [currentTime … currentTime+6h], top = now (with minutes), pph = 405/6.
 //
 //  Hour labels (FontSmall, asc=20, desc=6):
 //    Centre on tick: labelCy = ty + (kSmAsc−kSmDesc)/2 = ty+7
-//    Guard: skip if glyph top (=ty−13) < UPCOMING_Y.
+//    Guard: skip if glyph bleeds outside area.
 //
 //  Event boxes — mixed fonts:
 //    Line 1 title  (FontMedium): needs kMdH + 2*kPad = 42px
-//    Line 2 time   (FontSmall):  +kMdAdv+kSmH+kPad = +35+26+3 = +64  total ≥ 77px
-//    Line 3 desc   (FontSmall):  +kSmAdv = +25              total ≥ 102px, desc ≥ 2 words
+//    Line 2 time   (FontSmall):  total ≥ 71px
+//    Line 3 desc   (FontSmall):  total ≥ 96px, desc ≥ 2 words
 //
 void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events) {
     clearFbRegion(UPCOMING_X, UPCOMING_Y, UPCOMING_W, UPCOMING_H);
+    drawBorder(UPCOMING_X, UPCOMING_Y, UPCOMING_W, UPCOMING_H);
 
-    const float   pph       = static_cast<float>(UPCOMING_H) / HOURS_RANGE;
-    const int32_t startHour = static_cast<int32_t>(_currentTime.hour) - 6;
-    const int32_t endHour   = startHour + HOURS_RANGE;
+    static constexpr float kViewHours = 6.0f;
+    const float pph       = static_cast<float>(UPCOMING_H) / kViewHours;
+    const float startTime = _currentTime.hour + _currentTime.minute / 60.0f;
+    const float endTime   = startTime + kViewHours;
 
     for (int32_t y = UPCOMING_Y; y < UPCOMING_Y + UPCOMING_H; ++y)
         epd_draw_pixel(HOUR_SEP_X, y, 0x00, _fb);
 
-    for (int32_t i = 0; i <= HOURS_RANGE; ++i) {
-        const int32_t ty = UPCOMING_Y + static_cast<int32_t>(i * pph);
+    // Tick + label for every whole hour within the view.
+    const int32_t firstHour = static_cast<int32_t>(startTime) +
+                              (startTime > static_cast<float>(static_cast<int32_t>(startTime)) ? 1 : 0);
+    for (int32_t h = firstHour; static_cast<float>(h) <= endTime; ++h) {
+        const int32_t ty = UPCOMING_Y + static_cast<int32_t>((h - startTime) * pph);
 
         for (int32_t tx = HOUR_SEP_X; tx <= HOUR_SEP_X + 5; ++tx)
             epd_draw_pixel(tx, ty, 0x00, _fb);
 
-        if (i % 2 != 0) continue;
-
         // Vertically centre FontSmall label on tick.
-        const int32_t labelCy  = ty + (kSmAsc - kSmDesc) / 2;  // ty + 7
-        const int32_t glyphTop = labelCy - kSmAsc;              // ty - 13
-
-        if (glyphTop    < UPCOMING_Y)               continue;
+        const int32_t labelCy  = ty + (kSmAsc - kSmDesc) / 2;
+        const int32_t glyphTop = labelCy - kSmAsc;
+        if (glyphTop < UPCOMING_Y)                        continue;
         if (labelCy + kSmDesc > UPCOMING_Y + UPCOMING_H) continue;
 
-        const int32_t dispHour = (((startHour + i) % 24) + 24) % 24;
+        const int32_t dispHour = ((h % 24) + 24) % 24;
         char label[6];
         snprintf(label, sizeof(label), "%02d:00", dispHour);
         int32_t cx = UPCOMING_X + 4, cy = labelCy;
@@ -358,10 +365,10 @@ void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events
 
         const float evStartH = ev.dateTime.hour + ev.dateTime.minute / 60.0f;
         const float evEndH   = evStartH + ev.durationSeconds / 3600.0f;
-        if (evEndH  < static_cast<float>(startHour)) continue;
-        if (evStartH > static_cast<float>(endHour))  continue;
+        if (evEndH  < startTime) continue;
+        if (evStartH > endTime)  continue;
 
-        const float   relStart = evStartH - static_cast<float>(startHour);
+        const float relStart = evStartH - startTime;
         int32_t boxY = UPCOMING_Y + static_cast<int32_t>(relStart * pph);
         int32_t boxH = static_cast<int32_t>(ev.durationSeconds / 3600.0f * pph);
         if (boxH < MIN_EVENT_H) boxH = MIN_EVENT_H;
@@ -371,7 +378,7 @@ void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events
         if (boxY + boxH > areaBottom) boxH = areaBottom - boxY;
         if (boxH <= 0) continue;
 
-        const int32_t boxW    = EVENT_COL_W;
+        const int32_t boxW     = EVENT_COL_W;
         const int32_t textMaxW = boxW - 2 * kPad - 2;
         epd_draw_rect(EVENT_COL_X, boxY, boxW, boxH, 0x00, _fb);
 
@@ -436,6 +443,11 @@ void Lyligo_4_7_e_paper::showError(const String& message) {
 
 void Lyligo_4_7_e_paper::ensurePowerOn() {
     if (!_powerOn) { epd_poweron(); _powerOn = true; }
+}
+
+void Lyligo_4_7_e_paper::drawBorder(int32_t x, int32_t y, int32_t w, int32_t h) {
+    if (!_fb) return;
+    epd_draw_rect(x, y, w, h, 0x00, _fb);
 }
 
 void Lyligo_4_7_e_paper::clearFbRegion(int32_t x, int32_t y, int32_t w, int32_t h) {
