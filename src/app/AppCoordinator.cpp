@@ -16,7 +16,7 @@ AppCoordinator::AppCoordinator(DisplayManager*      display,
       _sync(sync) {}
 
 void AppCoordinator::setup() {
-    Serial.println("[App] " APP_NAME " v" APP_VERSION " starting");
+    LOG("[App] " APP_NAME " v" APP_VERSION " starting");
 
     if (_connectivity) {
         _connectivity->init();
@@ -27,7 +27,7 @@ void AppCoordinator::setup() {
     if (_display) {
         _state.displayInitialized = _display->init();
         if (!_state.displayInitialized) {
-            Serial.println("[App] WARNING: display init failed");
+            LOG("[App] WARNING: display init failed");
         }
     }
 
@@ -40,7 +40,7 @@ void AppCoordinator::setup() {
     if (_weather) _weather->init();
     if (_events)  _events->init();
 
-    Serial.println("[App] Setup complete");
+    LOG("[App] Setup complete");
 }
 
 void AppCoordinator::loop() {
@@ -84,14 +84,14 @@ void AppCoordinator::_registerSyncCallbacks() {
 
     _sync->onEventsReceived([this](const std::vector<EventData>& events) {
         if (_events) _events->ingestEvents(events);
-        Serial.printf("[App] Received %u events via sync\n", events.size());
+        LOG_F("[App] Received %u events via sync\n", events.size());
     });
 
     _sync->onWeatherReceived([this](const WeatherData& weather) {
         // A real impl would forward this to WeatherManager's cache.
         // Requires a push-capable WeatherManager extension.
         (void)weather;
-        Serial.println("[App] Weather update received via sync");
+        LOG("[App] Weather update received via sync");
     });
 }
 

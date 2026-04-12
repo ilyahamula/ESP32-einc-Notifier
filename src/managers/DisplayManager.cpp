@@ -1,4 +1,5 @@
 #include "managers/DisplayManager.h"
+#include "config.h"
 #include <Arduino.h>
 
 DisplayManager::DisplayManager(IDisplay* display)
@@ -8,7 +9,7 @@ bool DisplayManager::init() {
     if (!_display) return false;
     _initialized = _display->init();
     if (!_initialized) {
-        Serial.println("[DisplayManager] init failed");
+        LOG("[DisplayManager] init failed");
     }
     return _initialized;
 }
@@ -16,6 +17,8 @@ bool DisplayManager::init() {
 void DisplayManager::update(const WeatherData& weather,
                              const TimeData& time,
                              const std::vector<EventData>& events) {
+
+    LOG("[DisplayManager] Updating display with new data...");
     if (!_initialized || !_display) return;
     _display->clear();
     _display->showTime(time);

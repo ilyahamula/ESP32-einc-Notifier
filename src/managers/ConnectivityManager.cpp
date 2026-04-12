@@ -1,4 +1,5 @@
 #include "managers/ConnectivityManager.h"
+#include "config.h"
 #include <Arduino.h>
 
 ConnectivityManager::ConnectivityManager(IConnectivity* connectivity,
@@ -22,8 +23,8 @@ void ConnectivityManager::tick() {
     unsigned long now = millis();
     if (_retryCount < _maxRetries &&
         (now - _lastRetryMs) >= _retryDelayMs) {
-        Serial.printf("[ConnectivityManager] reconnect attempt %u/%u\n",
-                      _retryCount + 1, _maxRetries);
+        LOG_F("[ConnectivityManager] reconnect attempt %u/%u\n",
+              _retryCount + 1, _maxRetries);
         _connectivity->connect();
         _retryCount++;
         _lastRetryMs = now;

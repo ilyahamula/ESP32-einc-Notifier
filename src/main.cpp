@@ -11,20 +11,22 @@
 // ─── Application Coordinator ──────────────────────────────────────────────────
 #include "app/AppCoordinator.h"
 
-// ─── Null Stubs (swap these out for real implementations as you develop) ───────
-#include "stubs/NullDisplay.h"
-#include "stubs/NullWeatherProvider.h"
-#include "stubs/NullTimeProvider.h"
-#include "stubs/NullEventProvider.h"
-#include "stubs/NullConnectivity.h"
+// ─── Real implementations ─────────────────────────────────────────────────────
+#include "display/Lyligo_4_7_e_paper.h"
+#include "providers/Lyligo_4_7_e_paper_TimeProvider.h"
+
+// ─── Fake stubs (provide sample data without network/hardware) ────────────────
+#include "stubs/FakeWeatherProvider.h"
+#include "stubs/FakeEventProvider.h"
+#include "stubs/FakeConnectivity.h"
 #include "stubs/NullSyncService.h"
 
 // ─── Infrastructure Instances ─────────────────────────────────────────────────
-static NullDisplay          display;
-static NullWeatherProvider  weatherProvider;
-static NullTimeProvider     timeProvider;
-static NullEventProvider    eventProvider;
-static NullConnectivity     connectivity;
+static Lyligo_4_7_e_paper   display;
+static Lyligo_4_7_e_paper_TimeProvider timeProvider;
+static FakeWeatherProvider  weatherProvider;
+static FakeEventProvider    eventProvider;
+static FakeConnectivity     connectivity;
 static NullSyncService      syncService;
 
 // ─── Manager Instances ────────────────────────────────────────────────────────
@@ -48,7 +50,14 @@ static AppCoordinator app(
 
 // ─── Arduino Entry Points ──────────────────────────────────────────────────────
 void setup() {
+#ifdef DEBUG_SERIAL
     Serial.begin(SERIAL_BAUD_RATE);
+    delay(1000); // Allow time for serial monitor to connect
+#endif
+    if (!timeProvider.begin()) {
+        LOG("[WARN] RTC chip not found — time unavailable");
+    }
+
     app.setup();
 }
 

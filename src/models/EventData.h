@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "TimeData.h"
 
 enum class EventPriority : uint8_t {
     Low,
@@ -20,6 +21,7 @@ struct EventData {
     String        title;
     String        description;
     uint32_t      triggerTimestamp = 0;   // Unix timestamp (UTC)
+    TimeData      dateTime;              // Local time representation of triggerTimestamp
     uint32_t      durationSeconds  = 0;
     EventPriority priority         = EventPriority::Normal;
     EventType     type             = EventType::Reminder;

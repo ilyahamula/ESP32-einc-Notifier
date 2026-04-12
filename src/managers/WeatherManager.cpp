@@ -1,4 +1,5 @@
 #include "managers/WeatherManager.h"
+#include "config.h"
 #include <Arduino.h>
 
 WeatherManager::WeatherManager(IWeatherProvider* provider, unsigned long intervalMs)
@@ -30,7 +31,7 @@ bool WeatherManager::forceUpdate() {
     if (ok) {
         _cached.fetchedAtMs = millis();
         _lastFetchMs        = millis();
-        Serial.println("[WeatherManager] data updated");
+        LOG("[WeatherManager] data updated");
     }
     return ok;
 }

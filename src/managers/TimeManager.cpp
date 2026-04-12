@@ -1,4 +1,5 @@
 #include "managers/TimeManager.h"
+#include "config.h"
 #include <Arduino.h>
 
 TimeManager::TimeManager(ITimeProvider* provider, unsigned long syncIntervalMs)
@@ -17,7 +18,7 @@ void TimeManager::tick() {
     if (_lastSyncMs == 0 || (now - _lastSyncMs) >= _syncIntervalMs) {
         if (_provider->sync()) {
             _lastSyncMs = now;
-            Serial.println("[TimeManager] time synced");
+            LOG("[TimeManager] time synced");
         }
     }
     _provider->getTime(_current);

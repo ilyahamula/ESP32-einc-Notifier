@@ -1,4 +1,5 @@
 #include "managers/EventManager.h"
+#include "config.h"
 #include <Arduino.h>
 
 EventManager::EventManager(IEventProvider* provider, unsigned long syncIntervalMs)
@@ -14,7 +15,7 @@ void EventManager::tick() {
     if (_lastSyncMs == 0 || (now - _lastSyncMs) >= _syncIntervalMs) {
         _provider->fetchEvents(_events);
         _lastSyncMs = now;
-        Serial.printf("[EventManager] fetched %u events\n", _events.size());
+        LOG_F("[EventManager] fetched %u events\n", _events.size());
     }
 }
 

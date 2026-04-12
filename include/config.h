@@ -16,8 +16,8 @@
 
 // ─── Update Intervals (milliseconds) ─────────────────────────────────────────
 #define WEATHER_UPDATE_INTERVAL_MS   (10UL * 60UL * 1000UL)  // 10 min
-#define TIME_SYNC_INTERVAL_MS        (60UL * 60UL * 1000UL)  // 1 hr
-#define EVENT_SYNC_INTERVAL_MS       ( 5UL * 60UL * 1000UL)  // 5 min
+#define TIME_SYNC_INTERVAL_MS        (       60UL * 1000UL)  // 1 min
+#define EVENT_SYNC_INTERVAL_MS       (       60UL * 1000UL)  // 1 min
 #define DISPLAY_REFRESH_INTERVAL_MS  (       60UL * 1000UL)  // 1 min
 
 // ─── Connectivity ─────────────────────────────────────────────────────────────
@@ -27,3 +27,17 @@
 // ─── App Identity ─────────────────────────────────────────────────────────────
 #define APP_NAME     "E-Ink Notifier"
 #define APP_VERSION  "0.1.0"
+
+// ─── Serial / Debug ───────────────────────────────────────────────────────────
+// Comment out to disable all serial logging and Serial.begin() in production.
+#define DEBUG_SERIAL
+
+#define SERIAL_BAUD_RATE 115200
+
+#ifdef DEBUG_SERIAL
+  #define LOG(msg)          Serial.println(msg)
+  #define LOG_F(fmt, ...)   Serial.printf(fmt, ##__VA_ARGS__)
+#else
+  #define LOG(msg)          ((void)0)
+  #define LOG_F(fmt, ...)   ((void)0)
+#endif
