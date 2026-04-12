@@ -156,15 +156,14 @@ void Lyligo_4_7_e_paper::showEvents(const std::vector<EventData>& events) {
 void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
     clearFbRegion(WEEK_X, WEEK_Y, WEEK_W, WEEK_H);
 
-    // ── Find the Monday of the current week ──────────────────────────────
-    // DayOfWeek: Monday=1 … Sunday=7
-    int32_t todayDow = static_cast<int32_t>(_currentTime.weekday);
-    if (todayDow < 1 || todayDow > 7) todayDow = 1;
-    // Offset of Monday relative to today (0 if today is Monday, -1 if Tuesday, …)
-    int32_t monOffset = 1 - todayDow;  // ≤ 0
-
     static const char* kShortDay[] = {
         "", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+    };
+
+    auto daysInMonth = [](int y, int m) -> int {
+        if (m == 2 && (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0))) return 29;
+        static const int k[] = {0,31,28,31,30,31,30,31,31,30,31,30,31};
+        return k[m];
     };
 
     // ── Vertical separator ───────────────────────────────────────────────
@@ -172,40 +171,52 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
         epd_draw_pixel(DAY_SEP_X, y, 0x00, _fb);
     }
 
-    // ── Rows ─────────────────────────────────────────────────────────────
+    // ── Rows: today (d=0) through today+6 (d=6) ──────────────────────────
     for (int32_t d = 0; d < WEEK_DAYS; ++d) {
-        const int32_t rowY   = WEEK_Y + d * DAY_ROW_H;
-        const int32_t dowIdx = d + 1;  // 1=Mon … 7=Sun
+        // Calendar date for this row.
+        int rowYear  = _currentTime.year;
+        int rowMonth = _currentTime.month;
+        int rowDay   = _currentTime.day + d;
+        while (rowDay > daysInMonth(rowYear, rowMonth)) {
+            rowDay -= daysInMonth(rowYear, rowMonth);
+            if (++rowMonth > 12) { rowMonth = 1; rowYear++; }
+        }
+        // Weekday: advance from today's DOW (1=Mon…7=Sun).
+        const uint8_t rowDow = static_cast<uint8_t>(
+            (static_cast<int>(_currentTime.weekday) - 1 + d) % 7 + 1);
 
-        // Horizontal row separator (skip the very top to avoid double-line
-        // with the events area top border).
+        const int32_t rowY = WEEK_Y + d * DAY_ROW_H;
+
+        // Horizontal row separator (skip the very first to avoid double-line).
         if (d > 0) {
             for (int32_t x = WEEK_X; x < WEEK_X + WEEK_W; ++x) {
                 epd_draw_pixel(x, rowY, 0x00, _fb);
             }
         }
 
-        // Day label — centred vertically in the row (baseline ≈ mid + 7 px).
+        // Day label: two lines — "Mon" on the upper half, "14" on the lower.
         int32_t cx = WEEK_X + 4;
-        int32_t cy = rowY + DAY_ROW_H / 2 + 7;
-        writeln((GFXfont*)&FiraSans, kShortDay[dowIdx], &cx, &cy, _fb);
+        int32_t cy = rowY + 20;
+        writeln((GFXfont*)&FiraSans, kShortDay[rowDow], &cx, &cy, _fb);
 
-        // ── Collect events for this weekday ──────────────────────────────
-        // "Same weekday in the current week" means weekday matches AND the
-        // date falls in the Mon–Sun window we computed above.
+        char dayNumBuf[4];
+        snprintf(dayNumBuf, sizeof(dayNumBuf), "%d", rowDay);
+        cx = WEEK_X + 4;
+        cy = rowY + 44;
+        writeln((GFXfont*)&FiraSans, dayNumBuf, &cx, &cy, _fb);
+
+        // ── Collect events matching this exact calendar date ──────────────
         std::vector<const EventData*> dayEvents;
         for (const auto& ev : events) {
-            if (static_cast<int32_t>(ev.dateTime.weekday) != dowIdx) continue;
-            // Verify the event is in the same calendar week.
-            // Simple check: year & month match current, and day delta fits.
-            if (ev.dateTime.year != _currentTime.year) continue;
-            // Accept if the event's day-of-week offset from Monday matches d.
+            if (ev.dateTime.year  != rowYear)  continue;
+            if (ev.dateTime.month != rowMonth) continue;
+            if (ev.dateTime.day   != rowDay)   continue;
             dayEvents.push_back(&ev);
         }
 
         if (dayEvents.empty()) continue;
 
-        // Sort by start time (hour, minute).
+        // Sort by start time.
         std::sort(dayEvents.begin(), dayEvents.end(),
             [](const EventData* a, const EventData* b) {
                 if (a->dateTime.hour != b->dateTime.hour)
@@ -213,9 +224,9 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
                 return a->dateTime.minute < b->dateTime.minute;
             });
 
-        const int32_t n      = static_cast<int32_t>(dayEvents.size());
-        const int32_t slotW  = WEEK_EV_W / n;
-        const int32_t boxH   = DAY_ROW_H - 2;  // 1 px margin top and bottom
+        const int32_t n     = static_cast<int32_t>(dayEvents.size());
+        const int32_t slotW = WEEK_EV_W / n;
+        const int32_t boxH  = DAY_ROW_H - 2;  // 1 px margin top and bottom
 
         for (int32_t i = 0; i < n; ++i) {
             const EventData* ev = dayEvents[i];
@@ -227,7 +238,6 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
 
             epd_draw_rect(boxX, boxY, boxW, boxH, 0x00, _fb);
 
-            // Baseline: 20 px from top, clamped inside the box.
             int32_t cy2 = boxY + 20;
             if (cy2 > boxY + boxH - 4) cy2 = boxY + boxH - 4;
 
