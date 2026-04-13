@@ -291,27 +291,32 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
             const int32_t boxY = rowY + 1;
             const int32_t boxW = (i == n - 1)
                                  ? (WEEK_X + WEEK_W - 4 - boxX)
-                                 : slotW;
+                                 : slotW - 1;  // 1px white gap between adjacent events
 
-            epd_draw_rect(boxX, boxY, boxW, boxH, 0x00, _fb);
+            epd_fill_rect(boxX, boxY, boxW, boxH, 0x00, _fb);
 
-            // Title in FontSmall — fits when boxH ≥ kSmH + 2*kPad = 32px.
+            // Title + start time in white on the black fill.
             const int32_t textMaxW = boxW - 2 * kPad - 2;
             if (textMaxW > 0 && boxH >= kSmH + 2 * kPad) {
+                FontProperties wp = {};
+                wp.fg_color = 0x0F;
+                wp.bg_color = 0x00;
+
                 String label = fitText(&FontSmall, ev->title, textMaxW);
                 int32_t tcx = boxX + kPad + 1;
                 int32_t tcy = boxY + kSmAsc + kPad;
-                writeln((GFXfont*)&FontSmall, label.c_str(), &tcx, &tcy, _fb);
+                write_mode((GFXfont*)&FontSmall, label.c_str(), &tcx, &tcy, _fb,
+                           WHITE_ON_BLACK, &wp);
 
                 // Start time below title — fits when line 2 bottom (kPad+kSmAsc+kSmAdv+kSmDesc=54) < boxH.
-                const int32_t timeCy = tcy + kSmAdv;
                 if (kPad + kSmAsc + kSmAdv + kSmDesc < boxH) {
                     char timeBuf[6];
                     snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d",
                              ev->dateTime.hour, ev->dateTime.minute);
                     int32_t ttcx = boxX + kPad + 1;
-                    int32_t ttcy = timeCy;
-                    writeln((GFXfont*)&FontSmall, timeBuf, &ttcx, &ttcy, _fb);
+                    int32_t ttcy = tcy + kSmAdv;
+                    write_mode((GFXfont*)&FontSmall, timeBuf, &ttcx, &ttcy, _fb,
+                               WHITE_ON_BLACK, &wp);
                 }
             }
         }
@@ -433,43 +438,27 @@ void Lyligo_4_7_e_paper::showUpcomingEvents(const std::vector<EventData>& events
             : String();
 
         // Text baseline top-aligned inside box.
-        const int32_t textCy   = boxY + kPad + kSmAsc;
-        const bool    overflows = (textCy + kSmDesc > boxY + boxH);
+        const int32_t textCy = boxY + kPad + kSmAsc;
 
         // X position of time label (right-aligned inside box).
         const int32_t timeX = eventColX + boxW - 1 - kPad - timeW;
 
-        // Draw rect border.  When text overflows the box, leave a gap on the
-        // bottom edge covering the full text area so glyphs are unobstructed.
-        if (!overflows) {
-            epd_draw_rect(eventColX, boxY, boxW, boxH, 0x00, _fb);
-        } else {
-            const int32_t bx1 = eventColX;
-            const int32_t bx2 = eventColX + boxW - 1;
-            const int32_t by1 = boxY;
-            const int32_t by2 = boxY + boxH - 1;
-            // top edge
-            for (int32_t px = bx1; px <= bx2; ++px)
-                epd_draw_pixel(px, by1, 0x00, _fb);
-            // bottom edge — skip the interior where text sits
-            for (int32_t px = bx1; px <= bx2; ++px)
-                if (px <= bx1 || px >= bx2)  // keep only corners
-                    epd_draw_pixel(px, by2, 0x00, _fb);
-            // left edge
-            for (int32_t py = by1 + 1; py < by2; ++py)
-                epd_draw_pixel(bx1, py, 0x00, _fb);
-            // right edge
-            for (int32_t py = by1 + 1; py < by2; ++py)
-                epd_draw_pixel(bx2, py, 0x00, _fb);
-        }
+        // Fill box black; text rendered white on top.
+        epd_fill_rect(eventColX, boxY, boxW, boxH, 0x00, _fb);
+
+        FontProperties wp = {};
+        wp.fg_color = 0x0F;
+        wp.bg_color = 0x00;
 
         // Render title (left) and time range (right).
         if (!fittedTitle.isEmpty()) {
             int32_t cx = textX, cy = textCy;
-            writeln((GFXfont*)&FontSmall, fittedTitle.c_str(), &cx, &cy, _fb);
+            write_mode((GFXfont*)&FontSmall, fittedTitle.c_str(), &cx, &cy, _fb,
+                       WHITE_ON_BLACK, &wp);
         }
         int32_t tcx = timeX, tcy = textCy;
-        writeln((GFXfont*)&FontSmall, timeStr, &tcx, &tcy, _fb);
+        write_mode((GFXfont*)&FontSmall, timeStr, &tcx, &tcy, _fb,
+                   WHITE_ON_BLACK, &wp);
     }
 }
 
