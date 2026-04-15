@@ -1,5 +1,6 @@
 #pragma once
 #include "interfaces/IDisplay.h"
+#include "models/WeatherData.h"
 #include "epd_driver.h"
 
 class Lyligo_4_7_e_paper : public IDisplay {
@@ -16,6 +17,7 @@ public:
     void showEvents(const std::vector<EventData>& events)     override;
     void showStatus(const String& message)                    override;
     void showError(const String& message)                     override;
+    void showWaitConnection()                                  override;
 
     bool isReady() const override;
 
@@ -30,22 +32,23 @@ private:
     void drawBorder(int32_t x, int32_t y, int32_t w, int32_t h);
     void showUpcomingEvents(const std::vector<EventData>& events);
     void showWeekEvents(const std::vector<EventData>& events);
+    void drawWeatherIcon(int32_t ox, int32_t oy, int32_t sz, WeatherCondition cond);
 
     // ── Screen ────────────────────────────────────────────────────────────
     static constexpr int32_t SCREEN_W = EPD_WIDTH;   // 960
     static constexpr int32_t SCREEN_H = EPD_HEIGHT;  // 540
     static constexpr int32_t FB_SIZE  = (EPD_WIDTH / 2) * EPD_HEIGHT; // 259 200 bytes
 
-    // ── Date/Time panel — top-left, 2/3 width × 1/4 height ───────────────
+    // ── Date/Time panel — top-left, 1/2 width × 1/4 height ───────────────
     static constexpr int32_t TIME_X = 0;
     static constexpr int32_t TIME_Y = 0;
-    static constexpr int32_t TIME_W = SCREEN_W * 2 / 3;   // 640
+    static constexpr int32_t TIME_W = SCREEN_W / 2;       // 480
     static constexpr int32_t TIME_H = SCREEN_H / 4;        // 135
 
-    // ── Weather panel — top-right, 1/3 width × 1/4 height ────────────────
-    static constexpr int32_t WEATHER_X = TIME_W;
+    // ── Weather panel — top-right, 1/2 width × 1/4 height ────────────────
+    static constexpr int32_t WEATHER_X = TIME_W;          // 480
     static constexpr int32_t WEATHER_Y = 0;
-    static constexpr int32_t WEATHER_W = SCREEN_W / 3;    // 320
+    static constexpr int32_t WEATHER_W = SCREEN_W / 2;    // 480
     static constexpr int32_t WEATHER_H = SCREEN_H / 4;    // 135
 
     // ── Events area — lower 3/4, full width ──────────────────────────────

@@ -35,6 +35,10 @@ void DisplayManager::showErrorMessage(const String& msg) {
     if (_display) _display->showError(msg);
 }
 
+void DisplayManager::showWaitConnection() {
+    if (_display) _display->showWaitConnection();
+}
+
 bool DisplayManager::isReady() const {
     return _initialized && _display && _display->isReady();
 }

@@ -17,6 +17,7 @@ public:
 
     void showStatusMessage(const String& msg);
     void showErrorMessage(const String& msg);
+    void showWaitConnection();
 
     bool isReady() const;
 

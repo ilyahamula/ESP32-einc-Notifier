@@ -17,6 +17,7 @@ public:
     virtual void showEvents(const std::vector<EventData>& events)     = 0;
     virtual void showStatus(const String& message)                    = 0;
     virtual void showError(const String& message)                     = 0;
+    virtual void showWaitConnection()                                  = 0;
 
     virtual bool isReady() const = 0;
 };

@@ -2,7 +2,9 @@
 #include "fonts/FontSmall.h"    // SF Pro Text  Regular 10pt — advance_y=25  asc=20  desc=6
 #include "fonts/FontMedium.h"   // SF Pro Text  Regular 14pt — advance_y=35  asc=28  desc=8
 #include "fonts/FontClock.h"    // SF Pro Display Bold  32pt — advance_y=80  asc=64  desc=17
+#include "fonts/FontTimeBig.h"  // SF Pro Display Bold  51pt — advance_y=127 asc=102 desc=26
 #include "fonts/FontDate.h"     // SF Pro Display Reg   14pt — advance_y=35  asc=28  desc=8
+#include "fonts/FontLarge.h"    // SF Pro Display Reg   18pt — advance_y=45  asc=36  desc=10
 #include <algorithm>
 #include <cstring>
 #include <esp_heap_caps.h>
@@ -26,6 +28,48 @@ static const char* kWindDir[] = {
     "?", "N", "NE", "E", "SE", "S", "SW", "W", "NW"
 };
 
+// ─── Weather icon helpers ─────────────────────────────────────────────────────
+
+static inline void wpx(int32_t x, int32_t y, uint8_t* fb) {
+    if (x >= 0 && x < EPD_WIDTH && y >= 0 && y < EPD_HEIGHT)
+        epd_draw_pixel(x, y, 0x00, fb);
+}
+
+static void wCircle(int32_t cx, int32_t cy, int32_t r, bool fill, uint8_t* fb) {
+    for (int32_t dy = -r; dy <= r; ++dy)
+        for (int32_t dx = -r; dx <= r; ++dx) {
+            int32_t d2 = dx*dx + dy*dy;
+            if (fill ? d2 <= r*r : (d2 >= (r-1)*(r-1) && d2 <= r*r))
+                wpx(cx+dx, cy+dy, fb);
+        }
+}
+
+static void wLine(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t* fb) {
+    int32_t dx = abs(x1-x0), dy = -abs(y1-y0);
+    int32_t sx = x0<x1 ? 1 : -1, sy = y0<y1 ? 1 : -1, err = dx+dy;
+    for (;;) {
+        wpx(x0, y0, fb);
+        if (x0==x1 && y0==y1) break;
+        int32_t e2 = 2*err;
+        if (e2 >= dy) { err+=dy; x0+=sx; }
+        if (e2 <= dx) { err+=dx; y0+=sy; }
+    }
+}
+
+static void conditionLines(WeatherCondition c, const char*& l1, const char*& l2) {
+    l2 = nullptr;
+    switch (c) {
+        case WeatherCondition::Clear:        l1 = "Clear";    break;
+        case WeatherCondition::PartlyCloudy: l1 = "Partly";   l2 = "Cloudy"; break;
+        case WeatherCondition::Cloudy:       l1 = "Cloudy";   break;
+        case WeatherCondition::Rainy:        l1 = "Rainy";    break;
+        case WeatherCondition::Stormy:       l1 = "Stormy";   break;
+        case WeatherCondition::Snowy:        l1 = "Snowy";    break;
+        case WeatherCondition::Foggy:        l1 = "Foggy";    break;
+        default:                              l1 = "Unknown";  break;
+    }
+}
+
 // ─── Font metrics ─────────────────────────────────────────────────────────────
 //
 //  All values in pixels.  Asc = ascender (above baseline), Desc = |descender|
@@ -47,8 +91,12 @@ static constexpr int32_t kSmAsc  = 20, kSmDesc =  6, kSmH  = 26, kSmAdv  = 25;
 static constexpr int32_t kMdAsc  = 28, kMdDesc =  8, kMdH  = 36, kMdAdv  = 35;
 // FontClock  (32pt SF Pro Display Bold)
 static constexpr int32_t kClAsc  = 64, kClDesc = 17, kClH  = 81; // kClAdv unused
+// FontTimeBig (51pt SF Pro Display Bold)
+static constexpr int32_t kTbAsc  = 102, kTbDesc = 26;
 // FontDate   (14pt SF Pro Display Regular) — identical metrics to FontMedium
-static constexpr int32_t kDtAsc  = 28, kDtDesc =  8;
+static constexpr int32_t kDtAsc  = 28, kDtDesc =  8, kDtAdv = 35;
+// FontLarge  (18pt SF Pro Display Regular)
+static constexpr int32_t kLgAsc  = 36, kLgDesc = 10, kLgAdv = 45;
 
 // ─── Text helpers ─────────────────────────────────────────────────────────────
 
@@ -118,14 +166,16 @@ bool Lyligo_4_7_e_paper::isReady() const { return _ready; }
 // ─── showTime ────────────────────────────────────────────────────────────────
 //
 //  Panel: x=0, y=0, w=640, h=135
-//  Font: FontClock (32pt Bold) for time, FontDate (14pt) for date.
 //
-//  Line 1 — "14:30" (FontClock, asc=64, desc=17):
-//    cy1 = TIME_Y + 64 + kPad = 67
-//    glyph top=3  bottom=67+17=84
-//  Line 2 — "Thursday, 10 Apr 2026" (FontDate, asc=28, desc=8):
-//    cy2 = 84 + kPad + 28 = 84 + 4 + 28 = 116
-//    glyph top=88  bottom=116+8=124  (< 135 ✓, 11px margin)
+//  Time (FontTimeBig 51pt Bold): fills the full area height.
+//    cy  = TIME_Y + kPad + kTbAsc = 105
+//    top = 3, bottom = 131 (< 135 ✓)
+//
+//  Date (FontDate 14pt): two lines right of the time text, vertically centred.
+//    two-line block height = kDtAsc+kDtDesc + kPad + kDtAsc+kDtDesc = 75px
+//    block top offset = (135 - 75) / 2 = 30px
+//    line 1 (day name) cy = TIME_Y + 30 + kDtAsc = 58
+//    line 2 (date)     cy = 58 + kDtAdv           = 93
 //
 void Lyligo_4_7_e_paper::showTime(const TimeData& time) {
     if (!_ready || !_fb) return;
@@ -134,66 +184,256 @@ void Lyligo_4_7_e_paper::showTime(const TimeData& time) {
     clearFbRegion(TIME_X, TIME_Y, TIME_W, TIME_H);
     drawBorder(TIME_X, TIME_Y, TIME_W, TIME_H);
 
+    // ── Time ──────────────────────────────────────────────────────────────────
     char timeBuf[8];
     snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d", time.hour, time.minute);
 
-    uint8_t dowIdx = static_cast<uint8_t>(time.weekday);
-    const char* dayName = (dowIdx >= 1 && dowIdx <= 7) ? kDayNames[dowIdx] : "";
-    const char* monName = (time.month >= 1 && time.month <= 12) ? kMonthNames[time.month] : "???";
-    char dateBuf[44];
-    snprintf(dateBuf, sizeof(dateBuf), "%s, %02d %s %04d",
-             dayName, time.day, monName, time.year);
+    int32_t cx1 = TIME_X + 8, cy1 = TIME_Y + kPad + kTbAsc;
+    writeln((GFXfont*)&FontTimeBig, timeBuf, &cx1, &cy1, _fb);
 
-    // Line 1: clock (FontClock).
-    int32_t cy1 = TIME_Y + kClAsc + kPad;   // 67
-    int32_t cx1 = TIME_X + 20;
-    writeln((GFXfont*)&FontClock, timeBuf, &cx1, &cy1, _fb);
+    // ── Date (right of time, vertically centred) ──────────────────────────────
+    const int32_t timeW    = textWidth((GFXfont*)&FontTimeBig, timeBuf);
+    const int32_t dateX    = TIME_X + 8 + timeW + 16;
+    const int32_t dateMaxW = TIME_W - dateX - 8;
+    if (dateMaxW <= 0) return;
 
-    // Line 2: date (FontDate) — placed below the clock glyph bottom + kPad.
-    int32_t cy2 = TIME_Y + kClAsc + kPad + kClDesc + kPad + kDtAsc;  // 116
-    int32_t cx2 = TIME_X + 20;
-    String dateStr = fitText(&FontDate, String(dateBuf), TIME_W - 40);
-    writeln((GFXfont*)&FontDate, dateStr.c_str(), &cx2, &cy2, _fb);
+    const uint8_t dowIdx  = static_cast<uint8_t>(time.weekday);
+    const char*   dayName = (dowIdx >= 1 && dowIdx <= 7) ? kDayNames[dowIdx] : "";
+    const char*   monName = (time.month >= 1 && time.month <= 12) ? kMonthNames[time.month] : "???";
+    char dateBuf[32];
+    snprintf(dateBuf, sizeof(dateBuf), "%02d %s %04d", time.day, monName, time.year);
+
+    static constexpr int32_t kBlockH = kDtAsc + kDtDesc + kPad + kDtAsc + kDtDesc;  // 75
+    const int32_t blockTop = TIME_Y + (TIME_H - kBlockH) / 2;
+
+    int32_t cx2 = dateX, cy2 = blockTop + kDtAsc;
+    writeln((GFXfont*)&FontDate,
+            fitText(&FontDate, String(dayName), dateMaxW).c_str(),
+            &cx2, &cy2, _fb);
+
+    int32_t cx3 = dateX, cy3 = cy2 + kDtAdv;
+    writeln((GFXfont*)&FontDate,
+            fitText(&FontDate, String(dateBuf), dateMaxW).c_str(),
+            &cx3, &cy3, _fb);
+}
+
+// ─── drawWeatherIcon ──────────────────────────────────────────────────────────
+//
+//  Draws a sz×sz weather icon with top-left at (ox, oy).
+//  All geometry is proportional to sz (reference: sz=64).
+//
+void Lyligo_4_7_e_paper::drawWeatherIcon(int32_t ox, int32_t oy, int32_t sz, WeatherCondition cond) {
+    // Helper: scale a reference-64 coordinate to actual sz.
+    auto s = [&](int32_t v) -> int32_t { return (v * sz + 32) / 64; };
+
+    const int32_t cx = ox + sz/2, cy = oy + sz/2;
+
+    switch (cond) {
+        case WeatherCondition::Clear: {
+            const int32_t r  = s(12), gap = s(4), ray = s(10);
+            wCircle(cx, cy, r, true, _fb);
+            wLine(cx,        cy-r-gap,  cx,        cy-r-gap-ray, _fb);  // N
+            wLine(cx,        cy+r+gap,  cx,        cy+r+gap+ray, _fb);  // S
+            wLine(cx-r-gap,  cy,        cx-r-gap-ray, cy,         _fb);  // W
+            wLine(cx+r+gap,  cy,        cx+r+gap+ray, cy,         _fb);  // E
+            const int32_t d1 = s(10), d2 = s(17);
+            wLine(cx+d1, cy-d1, cx+d2, cy-d2, _fb);  // NE
+            wLine(cx+d1, cy+d1, cx+d2, cy+d2, _fb);  // SE
+            wLine(cx-d1, cy+d1, cx-d2, cy+d2, _fb);  // SW
+            wLine(cx-d1, cy-d1, cx-d2, cy-d2, _fb);  // NW
+            break;
+        }
+
+        case WeatherCondition::PartlyCloudy: {
+            // Mini sun top-left quarter
+            const int32_t sx = ox + s(14), sy = oy + s(14);
+            const int32_t sr = s(6), sg = s(2), sray = s(4);
+            wCircle(sx, sy, sr, true, _fb);
+            wLine(sx, sy-sr-sg, sx, sy-sr-sg-sray, _fb);
+            wLine(sx, sy+sr+sg, sx, sy+sr+sg+sray, _fb);
+            wLine(sx-sr-sg, sy, sx-sr-sg-sray, sy, _fb);
+            wLine(sx+sr+sg, sy, sx+sr+sg+sray, sy, _fb);
+            // Cloud bottom-right
+            const int32_t cb1x = ox+s(26), cb1y = oy+s(40), cb1r = s(10);
+            const int32_t cb2x = ox+s(42), cb2y = oy+s(38), cb2r = s(8);
+            const int32_t cb3x = ox+s(52), cb3y = oy+s(42), cb3r = s(6);
+            wCircle(cb1x, cb1y, cb1r, true, _fb);
+            wCircle(cb2x, cb2y, cb2r, true, _fb);
+            wCircle(cb3x, cb3y, cb3r, true, _fb);
+            for (int32_t px = ox+s(16); px <= ox+s(58); ++px)
+                for (int32_t py = oy+s(42); py <= oy+s(60); ++py)
+                    wpx(px, py, _fb);
+            break;
+        }
+
+        case WeatherCondition::Cloudy: {
+            const int32_t c1x = ox+s(20), c1y = oy+s(30), c1r = s(12);
+            const int32_t c2x = ox+s(38), c2y = oy+s(26), c2r = s(14);
+            const int32_t c3x = ox+s(52), c3y = oy+s(32), c3r = s(10);
+            wCircle(c1x, c1y, c1r, true, _fb);
+            wCircle(c2x, c2y, c2r, true, _fb);
+            wCircle(c3x, c3y, c3r, true, _fb);
+            for (int32_t px = ox+s(8); px <= ox+s(62); ++px)
+                for (int32_t py = oy+s(32); py <= oy+s(54); ++py)
+                    wpx(px, py, _fb);
+            break;
+        }
+
+        case WeatherCondition::Rainy: {
+            const int32_t c1x = ox+s(20), c1y = oy+s(22), c1r = s(10);
+            const int32_t c2x = ox+s(38), c2y = oy+s(18), c2r = s(12);
+            const int32_t c3x = ox+s(52), c3y = oy+s(24), c3r = s(8);
+            wCircle(c1x, c1y, c1r, true, _fb);
+            wCircle(c2x, c2y, c2r, true, _fb);
+            wCircle(c3x, c3y, c3r, true, _fb);
+            for (int32_t px = ox+s(10); px <= ox+s(60); ++px)
+                for (int32_t py = oy+s(24); py <= oy+s(38); ++py)
+                    wpx(px, py, _fb);
+            // 4 diagonal drops
+            for (int32_t d = 0; d < 4; ++d) {
+                const int32_t rx = ox + s(10 + d*14);
+                wLine(rx+s(4), oy+s(42), rx,      oy+s(54), _fb);
+                wLine(rx+s(4), oy+s(42), rx+s(6), oy+s(42), _fb);
+            }
+            break;
+        }
+
+        case WeatherCondition::Stormy: {
+            const int32_t c1x = ox+s(20), c1y = oy+s(20), c1r = s(10);
+            const int32_t c2x = ox+s(38), c2y = oy+s(16), c2r = s(12);
+            const int32_t c3x = ox+s(52), c3y = oy+s(22), c3r = s(8);
+            wCircle(c1x, c1y, c1r, true, _fb);
+            wCircle(c2x, c2y, c2r, true, _fb);
+            wCircle(c3x, c3y, c3r, true, _fb);
+            for (int32_t px = ox+s(10); px <= ox+s(60); ++px)
+                for (int32_t py = oy+s(22); py <= oy+s(34); ++py)
+                    wpx(px, py, _fb);
+            // Lightning bolt
+            wLine(cx+s(4),  oy+s(36), cx-s(4),  oy+s(48), _fb);
+            wLine(cx-s(4),  oy+s(48), cx+s(4),  oy+s(48), _fb);
+            wLine(cx+s(4),  oy+s(48), cx-s(6),  oy+s(62), _fb);
+            break;
+        }
+
+        case WeatherCondition::Snowy: {
+            const int32_t arm = s(28), tick = s(8);
+            wLine(cx, cy-arm, cx, cy+arm, _fb);
+            wLine(cx-arm, cy, cx+arm, cy, _fb);
+            const int32_t da = s(20);
+            wLine(cx-da, cy-da, cx+da, cy+da, _fb);
+            wLine(cx+da, cy-da, cx-da, cy+da, _fb);
+            // ticks on cardinal arms
+            wLine(cx-tick, cy-arm+s(6), cx+tick, cy-arm+s(6), _fb);
+            wLine(cx-tick, cy+arm-s(6), cx+tick, cy+arm-s(6), _fb);
+            wLine(cx-arm+s(6), cy-tick, cx-arm+s(6), cy+tick, _fb);
+            wLine(cx+arm-s(6), cy-tick, cx+arm-s(6), cy+tick, _fb);
+            break;
+        }
+
+        case WeatherCondition::Foggy: {
+            const int32_t lw = s(52), lx = ox + s(6);
+            const int32_t sw = s(40), sx2 = ox + s(12);
+            for (int32_t t = 0; t < 3; ++t) {
+                const int32_t y = oy + s(14 + t * 18);
+                for (int32_t px = lx;  px < lx+lw;  ++px) wpx(px, y,   _fb);
+                for (int32_t px = lx;  px < lx+lw;  ++px) wpx(px, y+1, _fb);
+                if (t < 2) {
+                    const int32_t ys = oy + s(23 + t * 18);
+                    for (int32_t px = sx2; px < sx2+sw; ++px) wpx(px, ys,   _fb);
+                    for (int32_t px = sx2; px < sx2+sw; ++px) wpx(px, ys+1, _fb);
+                }
+            }
+            break;
+        }
+
+        default:
+            wLine(cx-s(10), cy, cx+s(10), cy, _fb);
+            break;
+    }
 }
 
 // ─── showWeather ──────────────────────────────────────────────────────────────
 //
-//  Panel: x=640, y=0, w=320, h=135
-//  Font: FontMedium (14pt, asc=28, desc=8, adv=35) for all 3 lines.
+//  Panel: x=480, y=0, w=480, h=135
 //
-//  cy1 = 28+3  = 31  → top=3,  bot=39
-//  cy2 = 31+35 = 66  → top=38, bot=74
-//  cy3 = 66+35 = 101 → top=73, bot=109  (< 135 ✓, 26px margin)
+//  Left column — temperature + feels like:
+//    temp  (FontClock) cy = kPad + kClAsc = 67,  bottom = 84
+//    feels (FontSmall) cy = 84 + kPad + kSmAsc  = 107
+//
+//  Middle column — icon (sz=kClAsc=64) + condition name under it:
+//    iconY = kPad = 3,  iconBottom = 3+64 = 67
+//    condCy = 67 + kPad + kSmAsc = 90
+//
+//  Right column — location (FontLarge, right-aligned), humidity, wind (FontSmall):
+//    locCy  = kPad + kLgAsc         = 39
+//    humCy  = 39 + kLgAdv           = 84
+//    windCy = 84 + kSmAdv           = 109  → bottom 115 ✓
 //
 void Lyligo_4_7_e_paper::showWeather(const WeatherData& weather) {
     if (!_ready || !_fb) return;
     clearFbRegion(WEATHER_X, WEATHER_Y, WEATHER_W, WEATHER_H);
     drawBorder(WEATHER_X, WEATHER_Y, WEATHER_W, WEATHER_H);
 
-    const int32_t usableW = WEATHER_W - 24;
+    static constexpr int32_t kIconSz = kClAsc;  // 64px icon matches temp height
 
-    char locBuf[36];
-    snprintf(locBuf, sizeof(locBuf), "%.35s", weather.location.c_str());
-    String loc = fitText(&FontMedium, String(locBuf), usableW);
+    // ── Left: temperature ────────────────────────────────────────────────────
+    char tempBuf[8];
+    snprintf(tempBuf, sizeof(tempBuf), "%dC", static_cast<int>(weather.temperatureCelsius));
+    int32_t tcx = WEATHER_X + 8, tcy = WEATHER_Y + kPad + kClAsc;
+    writeln((GFXfont*)&FontClock, tempBuf, &tcx, &tcy, _fb);
 
-    char tempBuf[36];
-    snprintf(tempBuf, sizeof(tempBuf), "%.0fC / feels %.0fC",
-             weather.temperatureCelsius, weather.feelsLikeCelsius);
-    String temp = fitText(&FontMedium, String(tempBuf), usableW);
+    char feelsBuf[16];
+    snprintf(feelsBuf, sizeof(feelsBuf), "feels %dC", static_cast<int>(weather.feelsLikeCelsius));
+    int32_t fcx = WEATHER_X + 8, fcy = WEATHER_Y + kPad + kClAsc + kClDesc + kPad + kSmAsc;
+    writeln((GFXfont*)&FontSmall, feelsBuf, &fcx, &fcy, _fb);
 
-    uint8_t wdIdx = static_cast<uint8_t>(weather.windDirection);
-    const char* windDir = (wdIdx <= 8) ? kWindDir[wdIdx] : "?";
-    char windHumBuf[40];
-    snprintf(windHumBuf, sizeof(windHumBuf), "Wind %.0fkm/h %s  Hum %.0f%%",
-             weather.windSpeedKmh, windDir, weather.humidityPercent);
-    String wind = fitText(&FontMedium, String(windHumBuf), usableW);
+    // ── Middle: icon + condition name ────────────────────────────────────────
+    const int32_t tempTextW = textWidth((GFXfont*)&FontClock, tempBuf);
+    const int32_t iconX     = WEATHER_X + 8 + tempTextW + 16;
+    const int32_t iconY     = WEATHER_Y + kPad;
+    drawWeatherIcon(iconX, iconY, kIconSz, weather.condition);
 
-    int32_t cy = WEATHER_Y + kMdAsc + kPad;  // 31
-    int32_t cx;
+    const int32_t condCy = iconY + kIconSz + kPad + kSmAsc;
+    const char *cl1, *cl2;
+    conditionLines(weather.condition, cl1, cl2);
+    // Centre each line under the icon (no width cap — all labels fit within kIconSz).
+    auto drawCentred = [&](const char* txt, int32_t cy) {
+        const int32_t w = textWidth((GFXfont*)&FontSmall, txt);
+        int32_t cx = iconX + (kIconSz - w) / 2, cpy = cy;
+        writeln((GFXfont*)&FontSmall, txt, &cx, &cpy, _fb);
+    };
+    drawCentred(cl1, condCy);
+    if (cl2) drawCentred(cl2, condCy + kSmAdv);
 
-    cx = WEATHER_X + 12;  writeln((GFXfont*)&FontMedium, loc.c_str(),  &cx, &cy, _fb);
-    cy += kMdAdv; cx = WEATHER_X + 12;  writeln((GFXfont*)&FontMedium, temp.c_str(), &cx, &cy, _fb);
-    cy += kMdAdv; cx = WEATHER_X + 12;  writeln((GFXfont*)&FontMedium, wind.c_str(), &cx, &cy, _fb);
+    // ── Right: location, humidity, wind ──────────────────────────────────────
+    const int32_t rightEdge = WEATHER_X + WEATHER_W - 8;
+    const int32_t rightColX = iconX + kIconSz + 12;
+    const int32_t rightColW = rightEdge - rightColX;
+    if (rightColW <= 0) return;
+
+    // Location (FontLarge, right-aligned)
+    String loc = fitText((GFXfont*)&FontLarge, weather.location, rightColW);
+    const int32_t locW = textWidth((GFXfont*)&FontLarge, loc.c_str());
+    int32_t lcx = rightEdge - locW, lcy = WEATHER_Y + kPad + kLgAsc;
+    writeln((GFXfont*)&FontLarge, loc.c_str(), &lcx, &lcy, _fb);
+
+    // Humidity (FontSmall, right-aligned)
+    char humBuf[20];
+    snprintf(humBuf, sizeof(humBuf), "Humidity %.0f%%", weather.humidityPercent);
+    String hum = fitText((GFXfont*)&FontSmall, String(humBuf), rightColW);
+    const int32_t humW = textWidth((GFXfont*)&FontSmall, hum.c_str());
+    int32_t hcx = rightEdge - humW, hcy = WEATHER_Y + kPad + kLgAsc + kLgAdv;
+    writeln((GFXfont*)&FontSmall, hum.c_str(), &hcx, &hcy, _fb);
+
+    // Wind (FontSmall, right-aligned)
+    const uint8_t wdIdx   = static_cast<uint8_t>(weather.windDirection);
+    const char*   windDir = (wdIdx <= 8) ? kWindDir[wdIdx] : "?";
+    char windBuf[24];
+    snprintf(windBuf, sizeof(windBuf), "Wind %.0fkm/h %s", weather.windSpeedKmh, windDir);
+    String wind = fitText((GFXfont*)&FontSmall, String(windBuf), rightColW);
+    const int32_t windW = textWidth((GFXfont*)&FontSmall, wind.c_str());
+    int32_t wcx = rightEdge - windW, wcy = hcy + kSmAdv;
+    writeln((GFXfont*)&FontSmall, wind.c_str(), &wcx, &wcy, _fb);
 }
 
 // ─── showEvents ──────────────────────────────────────────────────────────────
@@ -291,7 +531,7 @@ void Lyligo_4_7_e_paper::showWeekEvents(const std::vector<EventData>& events) {
             const int32_t boxY = rowY + 1;
             const int32_t boxW = (i == n - 1)
                                  ? (WEEK_X + WEEK_W - 4 - boxX)
-                                 : slotW - 1;  // 1px white gap between adjacent events
+                                  : slotW - 1;  // 1px white gap between adjacent events
 
             epd_fill_rect(boxX, boxY, boxW, boxH, 0x00, _fb);
 
@@ -472,6 +712,17 @@ void Lyligo_4_7_e_paper::showStatus(const String& message) {
 
 void Lyligo_4_7_e_paper::showError(const String& message) {
     showStatus(message);
+}
+
+void Lyligo_4_7_e_paper::showWaitConnection() {
+    if (!_ready || !_fb) return;
+    memset(_fb, 0xFF, FB_SIZE);
+    static const char* msg = "Waiting for connection...";
+    const int32_t msgW = textWidth((GFXfont*)&FontMedium, msg);
+    int32_t cx = (SCREEN_W - msgW) / 2;
+    int32_t cy = SCREEN_H / 2 + kMdAsc / 2;
+    writeln((GFXfont*)&FontMedium, msg, &cx, &cy, _fb);
+    epd_draw_grayscale_image(epd_full_screen(), _fb);
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────

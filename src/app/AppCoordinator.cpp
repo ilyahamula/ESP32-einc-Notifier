@@ -16,17 +16,19 @@ AppCoordinator::AppCoordinator(DisplayManager*      display,
 void AppCoordinator::setup() {
     LOG("[App] " APP_NAME " v" APP_VERSION " starting");
 
-    if (_connectivity) {
-        _connectivity->init();
-        _state.activeConnectivity = _connectivity->getType();
-        _state.connectivityStatus = _connectivity->getStatus();
-    }
-
     if (_display) {
         _state.displayInitialized = _display->init();
         if (!_state.displayInitialized) {
             LOG("[App] WARNING: display init failed");
         }
+    }
+
+    if (_connectivity) {
+        if (_display && _state.displayInitialized)
+            _display->showWaitConnection();
+        _connectivity->init();
+        _state.activeConnectivity = _connectivity->getType();
+        _state.connectivityStatus = _connectivity->getStatus();
     }
 
     if (_sync) {

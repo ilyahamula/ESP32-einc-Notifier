@@ -14,6 +14,7 @@ public:
     void showEvents(const std::vector<EventData>&) override {}
     void showStatus(const String&)                 override {}
     void showError(const String&)                  override {}
+    void showWaitConnection()                       override {}
 
     bool isReady() const override { return true; }
 };
