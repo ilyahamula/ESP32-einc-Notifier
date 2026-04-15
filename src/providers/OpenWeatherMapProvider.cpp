@@ -122,11 +122,11 @@ bool OpenWeatherMapProvider::fetch(WeatherData& out) {
 // ─── OWM condition code → WeatherCondition ────────────────────────────────────
 // https://openweathermap.org/weather-conditions
 WeatherCondition OpenWeatherMapProvider::mapConditionCode(int code) {
-    if (code >= 200 && code < 300) return WeatherCondition::Stormy;
-    if (code >= 300 && code < 400) return WeatherCondition::Rainy;   // drizzle
-    if (code >= 500 && code < 600) return WeatherCondition::Rainy;
-    if (code >= 600 && code < 700) return WeatherCondition::Snowy;
-    if (code >= 700 && code < 800) return WeatherCondition::Foggy;   // mist/smoke/haze/fog
+    if (code >= 200 && code < 300) return WeatherCondition::ThunderyOutbreaks;
+    if (code >= 300 && code < 400) return WeatherCondition::LightDrizzle;
+    if (code >= 500 && code < 600) return WeatherCondition::ModerateRain;
+    if (code >= 600 && code < 700) return WeatherCondition::ModerateSnow;
+    if (code >= 700 && code < 800) return WeatherCondition::Fog;
     if (code == 800)               return WeatherCondition::Clear;
     if (code == 801 || code == 802) return WeatherCondition::PartlyCloudy;
     if (code >= 803)               return WeatherCondition::Cloudy;

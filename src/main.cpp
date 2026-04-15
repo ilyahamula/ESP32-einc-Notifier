@@ -14,19 +14,20 @@
 // ─── Real implementations ─────────────────────────────────────────────────────
 #include "display/Lyligo_4_7_e_paper.h"
 #include "providers/Lyligo_4_7_e_paper_TimeProvider.h"
+#include "providers/WiFiConnectivityProvider.h"
+#include "providers/WeatherApiProvider.h"
+#include "credentials.h"
 
 // ─── Fake stubs (provide sample data without network/hardware) ────────────────
-#include "stubs/FakeWeatherProvider.h"
 #include "stubs/FakeEventProvider.h"
-#include "stubs/FakeConnectivity.h"
 #include "stubs/NullSyncService.h"
 
 // ─── Infrastructure Instances ─────────────────────────────────────────────────
 static Lyligo_4_7_e_paper              display;
 static Lyligo_4_7_e_paper_TimeProvider timeProvider;
-static FakeWeatherProvider             weatherProvider;
+static WiFiConnectivityProvider        connectivity(WIFI_SSID, WIFI_PASSWORD);
+static WeatherApiProvider              weatherProvider(&connectivity, WEATHERAPI_KEY, "Chernivtsi");
 static FakeEventProvider               eventProvider;
-static FakeConnectivity                connectivity;
 static NullSyncService                 syncService;
 
 // ─── Manager Instances ────────────────────────────────────────────────────────

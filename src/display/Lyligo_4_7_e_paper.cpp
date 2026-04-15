@@ -56,17 +56,114 @@ static void wLine(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t* fb) {
     }
 }
 
+// Maps any condition to one of the 7 icon groups for drawing.
+static WeatherCondition toIconGroup(WeatherCondition c) {
+    switch (c) {
+        case WeatherCondition::Sunny:
+        case WeatherCondition::Clear:
+            return WeatherCondition::Clear;
+
+        case WeatherCondition::PartlyCloudy:
+        case WeatherCondition::PatchyRainPossible:
+        case WeatherCondition::PatchySnowPossible:
+        case WeatherCondition::PatchySleetPossible:
+        case WeatherCondition::PatchyFreezingDrizzle:
+            return WeatherCondition::PartlyCloudy;
+
+        case WeatherCondition::Cloudy:
+        case WeatherCondition::Overcast:
+            return WeatherCondition::Cloudy;
+
+        case WeatherCondition::Mist:
+        case WeatherCondition::Fog:
+        case WeatherCondition::FreezingFog:
+            return WeatherCondition::Fog;
+
+        case WeatherCondition::ThunderyOutbreaks:
+        case WeatherCondition::LightRainThunder:
+        case WeatherCondition::HeavyRainThunder:
+        case WeatherCondition::LightSnowThunder:
+        case WeatherCondition::HeavySnowThunder:
+            return WeatherCondition::ThunderyOutbreaks;
+
+        case WeatherCondition::BlowingSnow:
+        case WeatherCondition::Blizzard:
+        case WeatherCondition::LightSnow:
+        case WeatherCondition::ModerateSnow:
+        case WeatherCondition::HeavySnow:
+        case WeatherCondition::IcePellets:
+        case WeatherCondition::LightSnowShowers:
+        case WeatherCondition::HeavySnowShowers:
+        case WeatherCondition::LightIcePellets:
+        case WeatherCondition::HeavyIcePellets:
+            return WeatherCondition::ModerateSnow;
+
+        case WeatherCondition::LightDrizzle:
+        case WeatherCondition::FreezingDrizzle:
+        case WeatherCondition::HeavyFreezingDrizzle:
+        case WeatherCondition::LightRain:
+        case WeatherCondition::ModerateRain:
+        case WeatherCondition::HeavyRain:
+        case WeatherCondition::LightFreezingRain:
+        case WeatherCondition::HeavyFreezingRain:
+        case WeatherCondition::LightSleet:
+        case WeatherCondition::HeavySleet:
+        case WeatherCondition::LightRainShower:
+        case WeatherCondition::HeavyRainShower:
+        case WeatherCondition::LightSleetShowers:
+        case WeatherCondition::HeavySleetShowers:
+            return WeatherCondition::ModerateRain;
+
+        default:
+            return WeatherCondition::Unknown;
+    }
+}
+
 static void conditionLines(WeatherCondition c, const char*& l1, const char*& l2) {
     l2 = nullptr;
     switch (c) {
-        case WeatherCondition::Clear:        l1 = "Clear";    break;
-        case WeatherCondition::PartlyCloudy: l1 = "Partly";   l2 = "Cloudy"; break;
-        case WeatherCondition::Cloudy:       l1 = "Cloudy";   break;
-        case WeatherCondition::Rainy:        l1 = "Rainy";    break;
-        case WeatherCondition::Stormy:       l1 = "Stormy";   break;
-        case WeatherCondition::Snowy:        l1 = "Snowy";    break;
-        case WeatherCondition::Foggy:        l1 = "Foggy";    break;
-        default:                              l1 = "Unknown";  break;
+        case WeatherCondition::Sunny:                 l1 = "Sunny";              break;
+        case WeatherCondition::Clear:                 l1 = "Clear";              break;
+        case WeatherCondition::PartlyCloudy:          l1 = "Partly";  l2 = "Cloudy";   break;
+        case WeatherCondition::Cloudy:                l1 = "Cloudy";             break;
+        case WeatherCondition::Overcast:              l1 = "Overcast";           break;
+        case WeatherCondition::Mist:                  l1 = "Mist";               break;
+        case WeatherCondition::Fog:                   l1 = "Fog";                break;
+        case WeatherCondition::FreezingFog:           l1 = "Freezing"; l2 = "Fog";     break;
+        case WeatherCondition::PatchyRainPossible:    l1 = "Patchy";  l2 = "Rain";     break;
+        case WeatherCondition::PatchySnowPossible:    l1 = "Patchy";  l2 = "Snow";     break;
+        case WeatherCondition::PatchySleetPossible:   l1 = "Patchy";  l2 = "Sleet";    break;
+        case WeatherCondition::PatchyFreezingDrizzle: l1 = "Patchy";  l2 = "Drizzle";  break;
+        case WeatherCondition::ThunderyOutbreaks:     l1 = "Thunder";            break;
+        case WeatherCondition::BlowingSnow:           l1 = "Blowing"; l2 = "Snow";     break;
+        case WeatherCondition::Blizzard:              l1 = "Blizzard";           break;
+        case WeatherCondition::LightDrizzle:          l1 = "Drizzle";            break;
+        case WeatherCondition::FreezingDrizzle:       l1 = "Frz.";    l2 = "Drizzle";  break;
+        case WeatherCondition::HeavyFreezingDrizzle:  l1 = "Hvy Frz"; l2 = "Drizzle";  break;
+        case WeatherCondition::LightRain:             l1 = "Light";   l2 = "Rain";     break;
+        case WeatherCondition::ModerateRain:          l1 = "Rain";               break;
+        case WeatherCondition::HeavyRain:             l1 = "Heavy";   l2 = "Rain";     break;
+        case WeatherCondition::LightFreezingRain:     l1 = "Frz.";    l2 = "Rain";     break;
+        case WeatherCondition::HeavyFreezingRain:     l1 = "Hvy Frz"; l2 = "Rain";     break;
+        case WeatherCondition::LightSleet:            l1 = "Light";   l2 = "Sleet";    break;
+        case WeatherCondition::HeavySleet:            l1 = "Heavy";   l2 = "Sleet";    break;
+        case WeatherCondition::LightSnow:             l1 = "Light";   l2 = "Snow";     break;
+        case WeatherCondition::ModerateSnow:          l1 = "Snow";               break;
+        case WeatherCondition::HeavySnow:             l1 = "Heavy";   l2 = "Snow";     break;
+        case WeatherCondition::IcePellets:            l1 = "Ice";     l2 = "Pellets";  break;
+        case WeatherCondition::LightRainShower:       l1 = "Light";   l2 = "Shower";   break;
+        case WeatherCondition::HeavyRainShower:       l1 = "Heavy";   l2 = "Shower";   break;
+        case WeatherCondition::LightSleetShowers:     l1 = "Sleet";   l2 = "Shower";   break;
+        case WeatherCondition::HeavySleetShowers:     l1 = "Sleet";   l2 = "Shower";   break;
+        case WeatherCondition::LightSnowShowers:      l1 = "Snow";    l2 = "Shower";   break;
+        case WeatherCondition::HeavySnowShowers:      l1 = "Snow";    l2 = "Shower";   break;
+        case WeatherCondition::LightIcePellets:       l1 = "Ice";     l2 = "Shower";   break;
+        case WeatherCondition::HeavyIcePellets:       l1 = "Ice";     l2 = "Shower";   break;
+        case WeatherCondition::LightRainThunder:      l1 = "Thunder"; l2 = "Rain";     break;
+        case WeatherCondition::HeavyRainThunder:      l1 = "Thunder"; l2 = "Rain";     break;
+        case WeatherCondition::LightSnowThunder:      l1 = "Thunder"; l2 = "Snow";     break;
+        case WeatherCondition::HeavySnowThunder:      l1 = "Thunder"; l2 = "Snow";     break;
+        default:                                       l1 = "Unknown";            break;
     }
 }
 
@@ -228,7 +325,7 @@ void Lyligo_4_7_e_paper::drawWeatherIcon(int32_t ox, int32_t oy, int32_t sz, Wea
 
     const int32_t cx = ox + sz/2, cy = oy + sz/2;
 
-    switch (cond) {
+    switch (toIconGroup(cond)) {
         case WeatherCondition::Clear: {
             const int32_t r  = s(12), gap = s(4), ray = s(10);
             wCircle(cx, cy, r, true, _fb);
@@ -279,7 +376,7 @@ void Lyligo_4_7_e_paper::drawWeatherIcon(int32_t ox, int32_t oy, int32_t sz, Wea
             break;
         }
 
-        case WeatherCondition::Rainy: {
+        case WeatherCondition::ModerateRain: {
             const int32_t c1x = ox+s(20), c1y = oy+s(22), c1r = s(10);
             const int32_t c2x = ox+s(38), c2y = oy+s(18), c2r = s(12);
             const int32_t c3x = ox+s(52), c3y = oy+s(24), c3r = s(8);
@@ -298,7 +395,7 @@ void Lyligo_4_7_e_paper::drawWeatherIcon(int32_t ox, int32_t oy, int32_t sz, Wea
             break;
         }
 
-        case WeatherCondition::Stormy: {
+        case WeatherCondition::ThunderyOutbreaks: {
             const int32_t c1x = ox+s(20), c1y = oy+s(20), c1r = s(10);
             const int32_t c2x = ox+s(38), c2y = oy+s(16), c2r = s(12);
             const int32_t c3x = ox+s(52), c3y = oy+s(22), c3r = s(8);
@@ -315,7 +412,7 @@ void Lyligo_4_7_e_paper::drawWeatherIcon(int32_t ox, int32_t oy, int32_t sz, Wea
             break;
         }
 
-        case WeatherCondition::Snowy: {
+        case WeatherCondition::ModerateSnow: {
             const int32_t arm = s(28), tick = s(8);
             wLine(cx, cy-arm, cx, cy+arm, _fb);
             wLine(cx-arm, cy, cx+arm, cy, _fb);
@@ -330,7 +427,7 @@ void Lyligo_4_7_e_paper::drawWeatherIcon(int32_t ox, int32_t oy, int32_t sz, Wea
             break;
         }
 
-        case WeatherCondition::Foggy: {
+        case WeatherCondition::Fog: {
             const int32_t lw = s(52), lx = ox + s(6);
             const int32_t sw = s(40), sx2 = ox + s(12);
             for (int32_t t = 0; t < 3; ++t) {

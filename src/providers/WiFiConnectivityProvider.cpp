@@ -9,24 +9,31 @@ WiFiConnectivityProvider::WiFiConnectivityProvider(const char* ssid,
 
 bool WiFiConnectivityProvider::connect() {
     _status = ConnectivityStatus::Connecting;
-    LOG_F("[WiFi] Connecting to %s ...\n", _ssid);
+    LOG_F("[WiFi] Connecting to SSID: %s (timeout %ums)\n", _ssid, _timeoutMs);
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(_ssid, _password);
 
     const uint32_t deadline = millis() + _timeoutMs;
+    uint32_t lastDot = 0;
     while (WiFi.status() != WL_CONNECTED) {
         if (millis() > deadline) {
             _status = ConnectivityStatus::Error;
-            LOG("[WiFi] Connection timed out");
+            LOG_F("[WiFi] Timed out after %ums. Last status: %d\n",
+                  _timeoutMs, static_cast<int>(WiFi.status()));
             WiFi.disconnect(true);
             return false;
+        }
+        if (millis() - lastDot >= 1000) {
+            LOG_F("[WiFi] ... status=%d\n", static_cast<int>(WiFi.status()));
+            lastDot = millis();
         }
         delay(200);
     }
 
     _status = ConnectivityStatus::Connected;
-    LOG_F("[WiFi] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
+    LOG_F("[WiFi] Connected! IP=%s  RSSI=%ddBm\n",
+          WiFi.localIP().toString().c_str(), WiFi.RSSI());
     return true;
 }
 
